@@ -1,0 +1,7 @@
+{
+  "content": "# TrustCharge managed demo component: charging protocol adapter\nPROTOCOL_VERSION = '1.2.1'\n# Update: stricter simulated protocol-state validation.\n",
+  "content_sha256": "45d60a20a9c4e0128977847823c08974f117252516eda1370c18a7a723210bea",
+  "minimum_secure_version": "1.2.1",
+  "notes": "Fixes a simulated protocol-state validation advisory",
+  "version": "1.2.1"
+}

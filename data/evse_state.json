@@ -1,0 +1,16 @@
+{
+  "charging": true,
+  "configuration": {
+    "charging_enabled": true,
+    "max_current": 32,
+    "max_voltage": 400
+  },
+  "connector_id": "CCS-1",
+  "enclosure_closed": true,
+  "energy_kwh": 2.25,
+  "error": false,
+  "message": "Vehicle connected; EVSE ready.",
+  "mode": "SIMULATED",
+  "security_status": "SECURE",
+  "vehicle_connected": true
+}

@@ -1,0 +1,37 @@
+[
+    {
+        "timestamp": "2026-11-14T18:54:09.958159+00:00",
+        "charger_id": "TC-CHARGER-001",
+        "event_type": "CONFIGURATION_BASELINE_CREATED",
+        "severity": "INFO",
+        "message": "Trusted configuration baseline created."
+    },
+    {
+        "timestamp": "2026-11-14T18:54:09.974596+00:00",
+        "charger_id": "TC-CHARGER-001",
+        "event_type": "CONFIGURATION_TAMPERING",
+        "severity": "CRITICAL",
+        "message": "Unauthorized configuration modification detected."
+    },
+    {
+        "timestamp": "2026-11-14T18:54:09.986314+00:00",
+        "charger_id": "TC-CHARGER-001",
+        "event_type": "FIRMWARE_BASELINE_CREATED",
+        "severity": "INFO",
+        "message": "Installed firmware integrity baseline created."
+    },
+    {
+        "timestamp": "2026-11-14T18:54:10.011381+00:00",
+        "charger_id": "TC-CHARGER-001",
+        "event_type": "FIRMWARE_TAMPERING",
+        "severity": "CRITICAL",
+        "message": "Unauthorized modification of installed firmware detected."
+    },
+    {
+        "timestamp": "2026-11-14T18:54:10.021390+00:00",
+        "charger_id": "TC-CHARGER-001",
+        "event_type": "ENCLOSURE_TAMPERING",
+        "severity": "CRITICAL",
+        "message": "Charger enclosure opening detected."
+    }
+]

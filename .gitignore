@@ -1,0 +1,7 @@
+# Private signing key
+keys/private_key.pem
+
+# Python environment and cache
+.venv/
+__pycache__/
+*.pyc

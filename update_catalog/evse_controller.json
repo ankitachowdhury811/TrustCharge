@@ -1,0 +1,7 @@
+{
+  "content": "# TrustCharge managed demo component: EVSE controller\nCONTROLLER_VERSION = '1.1.0'\n# Update: stronger simulated session-state validation.\n",
+  "content_sha256": "7ca9da3540bf0516a19069cbed580db310c7f938130cb80ec2afabe8706b08c7",
+  "minimum_secure_version": "1.0.0",
+  "notes": "Controller input validation and session-state hardening",
+  "version": "1.1.0"
+}

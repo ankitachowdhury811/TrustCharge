@@ -1,0 +1,21 @@
+{
+    "charging_protocol": {
+        "enrolled_utc": "2026-10-20T19:37:16.972403+00:00",
+        "file": "protocol.py",
+        "sha256": "45d60a20a9c4e0128977847823c08974f117252516eda1370c18a7a723210bea"
+    },
+    "evse_controller": {
+        "enrolled_utc": "2026-10-20T19:37:16.972384+00:00",
+        "file": "controller.py",
+        "sha256": "7ca9da3540bf0516a19069cbed580db310c7f938130cb80ec2afabe8706b08c7"
+    },
+    "security_agent": {
+        "enrolled_utc": "2026-10-20T19:37:16.972416+00:00",
+        "file": "security_agent.py",
+        "sha256": "5b800d4fdaa7a084b35a82cfad8c53fa15d5d277cbba58193effae3cbcbc514a"
+    },
+    "configuration_sha256": "3bf8af2365fcacfb5823a056ab3a1c86f622b6e26df1341cc0b8cba92156fbe1",
+    "charger_id": "TC-CHARGER-001",
+    "firmware_sha256": "8f3a0a671f0c0277a0596cb53e4fcfa5da8b6fef873cf646dc0343dad68203b7",
+    "firmware_path": "charger\\installed\\installed_firmware.bin"
+}

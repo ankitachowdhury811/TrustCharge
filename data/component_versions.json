@@ -1,0 +1,5 @@
+{
+  "charging_protocol": "1.2.1",
+  "evse_controller": "1.1.0",
+  "security_agent": "1.1.0"
+}
