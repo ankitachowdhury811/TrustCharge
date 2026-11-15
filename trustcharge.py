@@ -404,6 +404,56 @@ class TrustCharge:
         }
 
 
+    def recover_security(self):
+        """Restore SECURE state only after all required checks pass."""
+        state = self.get_evse()
+
+        if not state.get("enclosure_closed", True):
+            result = {
+                "status": "REJECTED",
+                "details": "Recovery blocked: EVSE enclosure is still open."
+            }
+        else:
+            configuration_result = self.verify_configuration()
+            if configuration_result.get("status") != "VERIFIED":
+                result = {
+                    "status": "REJECTED",
+                    "details": (
+                        "Configuration integrity verification failed: "
+                        f"{configuration_result.get('status', 'UNKNOWN')}."
+                    )
+                }
+            else:
+                firmware_result = self.verify_installed_firmware()
+                if firmware_result.get("status") != "VERIFIED":
+                    result = {
+                        "status": "REJECTED",
+                        "details": (
+                            "Firmware integrity verification failed: "
+                            f"{firmware_result.get('status', 'UNKNOWN')}."
+                        )
+                    }
+                else:
+                    state = self.get_evse()
+                    state["security_status"] = "SECURE"
+                    state["charging"] = False
+                    state["message"] = (
+                        "Security checks passed. EVSE recovered; "
+                        "charging may be started when ready."
+                    )
+                    self._save_evse(state)
+                    result = {
+                        "status": "RECOVERED",
+                        "details": "All security checks passed."
+                    }
+
+        self._audit(
+            "security_recovery",
+            result["status"],
+            {"details": result["details"]}
+        )
+        return result
+
     def read_audit(self):
         if not self.audit_path.exists():
             return []
