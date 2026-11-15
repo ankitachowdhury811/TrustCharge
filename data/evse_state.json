@@ -1,16 +1,17 @@
 {
-  "charging": true,
-  "configuration": {
-    "charging_enabled": true,
-    "max_current": 32,
-    "max_voltage": 400
-  },
+  "charger_id": "TC-CHARGER-001",
   "connector_id": "CCS-1",
-  "enclosure_closed": true,
-  "energy_kwh": 2.25,
-  "error": false,
-  "message": "Vehicle connected; EVSE ready.",
   "mode": "SIMULATED",
+  "vehicle_connected": false,
+  "charging": false,
+  "energy_kwh": 0.0,
+  "error": false,
   "security_status": "SECURE",
-  "vehicle_connected": true
+  "enclosure_closed": true,
+  "configuration": {
+    "max_voltage": 400,
+    "max_current": 32,
+    "charging_enabled": true
+  },
+  "message": "EVSE available; waiting for a vehicle."
 }
