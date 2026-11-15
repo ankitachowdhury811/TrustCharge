@@ -9,7 +9,7 @@ tc = TrustCharge(ROOT)
 st.set_page_config(page_title="TrustCharge | EVSE Security Operations", page_icon="🔌", layout="wide")
 st.title("🔌 TrustCharge")
 st.caption("EV charging station operations, component integrity, update management, and security monitoring")
-st.warning("Prototype boundary: the EVSE, vehicle connection, and charging session are simulated. File hashing, integrity comparisons, update installation, version checks, and audit logging operate on real local files in this project folder.")
+st.warning("Prototype boundary: the EVSE, vehicle connection, and charging session are simulated. The integrity and update tabs use isolated demo component files; the actual project modules are kept separate and are not overwritten by demo updates.")
 
 # Sidebar: operational simulator
 st.sidebar.header("EVSE simulator")
