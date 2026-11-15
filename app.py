@@ -350,39 +350,40 @@ with tab5:
         if not filename:
             st.error("No installed firmware found.")
         else:
-            installed = (ROOT / filename).resolve()
-            expected_directory = (
-                ROOT / "firmware" / "installed"
-            ).resolve()
+            # State files created on Windows may contain backslash separators.
+            relative_name = Path(str(filename).replace("\\\\", "/").replace("\\", "/"))
+            expected_directory = (ROOT / "firmware" / "installed").resolve()
 
-            if installed.parent != expected_directory:
-                st.error("Unexpected firmware installation path.")
-            elif not installed.is_file():
-                st.error("Installed firmware file is missing.")
+            if relative_name.is_absolute() or ".." in relative_name.parts:
+                st.error("Unsafe installed firmware path.")
             else:
-                original = installed.read_bytes()
-
+                installed = (ROOT / relative_name).resolve()
                 try:
-                    installed.write_bytes(
-                        original + b"\nTAMPERED"
-                    )
+                    installed.relative_to(expected_directory)
+                    path_is_safe = True
+                except ValueError:
+                    path_is_safe = False
 
-                    result = tc.verify_installed_firmware()
+                if not path_is_safe:
+                    st.error("Unexpected firmware installation path.")
+                elif not installed.is_file():
+                    st.error("Installed firmware file is missing.")
+                else:
+                    original = installed.read_bytes()
+                    try:
+                        installed.write_bytes(original + b"\\nTAMPERED")
+                        result = tc.verify_installed_firmware()
+                        if result["status"] == "TAMPERED":
+                            st.success("Installed firmware tampering detected.")
+                        else:
+                            st.error("Unexpected integrity verification result.")
+                        st.json(result)
+                    finally:
+                        installed.write_bytes(original)
 
-                    if result["status"] == "TAMPERED":
-                        st.success("Installed firmware tampering detected.")
-                    else:
-                        st.error("Unexpected integrity verification result.")
-
-                    st.json(result)
-
-                finally:
-                    installed.write_bytes(original)
-
-                restored = tc.verify_installed_firmware()
-                st.write("Post-test restoration verification:")
-                st.json(restored)
-
+                    restored = tc.verify_installed_firmware()
+                    st.write("Post-test restoration verification:")
+                    st.json(restored)
 
 st.divider()
 st.caption("Scope: local EVSE software prototype. It does not communicate with a real charger, vehicle, BMS, CCS controller, or OCPP backend. Do not use it to update production systems.")
