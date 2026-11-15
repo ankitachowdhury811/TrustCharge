@@ -76,9 +76,9 @@ class TrustCharge:
 
     def _seed_files(self):
         components = {
-            "evse_controller": ("controller.py", "# TrustCharge managed demo component: EVSE controller\nCONTROLLER_VERSION = '1.0.0'\n# Simulated contactor and session-state logic.\n"),
-            "charging_protocol": ("protocol.py", "# TrustCharge managed demo component: charging protocol adapter\nPROTOCOL_VERSION = '1.2.0'\n# Simulated CCS message-state adapter; no vehicle communication occurs.\n"),
-            "security_agent": ("security_agent.py", "# TrustCharge managed demo component: security agent\nAGENT_VERSION = '1.0.0'\n# Simulated integrity and audit agent.\n"),
+            "evse_controller": ("demo_controller.py", "# TrustCharge managed demo component: EVSE controller\nCONTROLLER_VERSION = '1.1.0'\n# Update: stronger simulated session-state validation.\n"),
+            "charging_protocol": ("demo_protocol.py", "# TrustCharge managed demo component: charging protocol adapter\nPROTOCOL_VERSION = '1.2.1'\n# Update: stricter simulated protocol-state validation.\n"),
+            "security_agent": ("demo_security_agent.py", "# TrustCharge managed demo component: security agent\nAGENT_VERSION = '1.1.0'\n# Update: improved audit-event validation.\n"),
         }
         self.component_map = {}
         for key, (filename, content) in components.items():
@@ -86,6 +86,25 @@ class TrustCharge:
             if not path.exists():
                 path.write_text(content, encoding="utf-8")
             self.component_map[key] = path
+
+        # The dashboard manages isolated demo fixtures. Keep the actual project
+        # modules untouched so demo updates cannot overwrite executable code.
+        if self.baseline_path.exists():
+            try:
+                baseline = json.loads(self.baseline_path.read_text(encoding="utf-8"))
+                changed = False
+                for key, path in self.component_map.items():
+                    entry = baseline.get(key, {})
+                    if entry.get("sha256") == sha256_file(path):
+                        if entry.get("file") != path.name:
+                            entry["file"] = path.name
+                            baseline[key] = entry
+                            changed = True
+                if changed:
+                    self._write_json(self.baseline_path, baseline)
+            except (OSError, json.JSONDecodeError, TypeError):
+                pass
+
         catalogue = {
             "evse_controller": {"version": "1.1.0", "minimum_secure_version": "1.0.0", "notes": "Controller input validation and session-state hardening", "content": "# TrustCharge managed demo component: EVSE controller\nCONTROLLER_VERSION = '1.1.0'\n# Update: stronger simulated session-state validation.\n"},
             "charging_protocol": {"version": "1.2.1", "minimum_secure_version": "1.2.1", "notes": "Fixes a simulated protocol-state validation advisory", "content": "# TrustCharge managed demo component: charging protocol adapter\nPROTOCOL_VERSION = '1.2.1'\n# Update: stricter simulated protocol-state validation.\n"},
@@ -585,8 +604,8 @@ class TrustCharge:
         package = json.loads(path.read_text(encoding="utf-8"))
         content = package["content"].encode("utf-8")
         actual = hashlib.sha256(content).hexdigest()
-        expected = hashlib.sha256(package["content"].encode("utf-8")).hexdigest()
-        if actual != expected:
+        expected = package.get("content_sha256")
+        if not isinstance(expected, str) or actual != expected:
             self._audit("update_install", "REJECTED", {"component": key, "reason": "Package hash mismatch"})
             return [{"component": key, "status": "REJECTED", "details": "Package hash mismatch."}]
         installed = self._versions().get(key, "0.0.0")
