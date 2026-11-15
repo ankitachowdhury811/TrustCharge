@@ -69,6 +69,8 @@ d.metric(
     "Security alert" if security_alert else ("Fault" if evse["error"] else "Normal")
 )
 st.caption(f"{status_color} {evse['message']}")
+if security_alert:
+    st.error("Charging is blocked while the EVSE security state is not SECURE.")
 
 st.divider()
 st.header("Software integrity and lifecycle")
@@ -264,8 +266,12 @@ with tab5:
             else:
                 st.error(result["details"])
 
-            st.json(result)
+            st.session_state["firmware_action_result"] = result
             st.rerun()
+
+    if "firmware_action_result" in st.session_state:
+        st.subheader("Latest firmware installation result")
+        st.json(st.session_state["firmware_action_result"])
 
     st.divider()
 
@@ -384,6 +390,7 @@ st.caption("Scope: local EVSE software prototype. It does not communicate with a
 
 with tab6:
     st.subheader("EVSE Configuration & Physical Security")
+
     st.write(
         "Monitor the simulated charger configuration, detect unauthorized "
         "configuration changes, simulate enclosure tampering, and perform "
@@ -423,8 +430,11 @@ with tab6:
         key="create_config_baseline"
     ):
         baseline_hash = tc.create_configuration_baseline()
-        st.success("Configuration baseline created.")
-        st.code(baseline_hash, language="text")
+        st.session_state["evse_action_result"] = {
+            "level": "success",
+            "message": "Configuration baseline created.",
+            "data": {"sha256": baseline_hash}
+        }
 
     if verify_col.button(
         "Verify configuration",
@@ -432,12 +442,14 @@ with tab6:
     ):
         config_result = tc.verify_configuration()
         if config_result["status"] == "VERIFIED":
-            st.success("Configuration integrity verified.")
+            level, message = "success", "Configuration integrity verified."
         elif config_result["status"] == "TAMPERED":
-            st.error("Configuration tampering detected. Charging has been blocked.")
+            level, message = "error", "Configuration tampering detected. Charging has been blocked."
         else:
-            st.warning("No configuration baseline exists. Create one first.")
-        st.json(config_result)
+            level, message = "warning", "No configuration baseline exists. Create one first."
+        st.session_state["evse_action_result"] = {
+            "level": level, "message": message, "data": config_result
+        }
 
     st.json(current_evse.get("configuration", {}))
 
@@ -456,21 +468,22 @@ with tab6:
         key="simulate_enclosure_open"
     ):
         result = tc.simulate_enclosure_open()
-        st.error("Enclosure tampering detected. Charging has been stopped.")
-        st.json(result)
-        st.rerun()
+        st.session_state["evse_action_result"] = {
+            "level": "error",
+            "message": "Enclosure tampering detected. Charging has been stopped.",
+            "data": result
+        }
 
     if close_col.button(
         "Simulate enclosure closing",
         key="simulate_enclosure_close"
     ):
         result = tc.simulate_enclosure_close()
-        st.warning(
-            "Enclosure closed. Existing security alerts remain active "
-            "until verification and recovery."
-        )
-        st.json(result)
-        st.rerun()
+        st.session_state["evse_action_result"] = {
+            "level": "warning",
+            "message": "Enclosure closed. Existing security alerts remain active until verification and recovery.",
+            "data": result
+        }
 
     st.divider()
     st.subheader("Controlled security recovery")
@@ -489,12 +502,30 @@ with tab6:
         recovery_result = tc.recover_security()
 
         if recovery_result["status"] == "RECOVERED":
-            st.success("Security recovery successful. EVSE returned to SECURE.")
+            level, message = "success", "Security recovery successful. EVSE returned to SECURE."
         else:
-            st.error("Security recovery rejected. One or more checks failed.")
+            level, message = "error", "Security recovery rejected. One or more checks failed."
 
-        st.json(recovery_result)
-        st.rerun()
+        st.session_state["evse_action_result"] = {
+            "level": level, "message": message, "data": recovery_result
+        }
+
+    # Render feedback after processing the current button press.
+    # No explicit st.rerun() is used here, so the result remains on the page.
+    saved_result = st.session_state.get("evse_action_result")
+    if saved_result:
+        result_level = saved_result.get("level", "info")
+        result_message = saved_result.get("message", "Operation completed.")
+        if result_level == "success":
+            st.success(result_message)
+        elif result_level == "warning":
+            st.warning(result_message)
+        elif result_level == "error":
+            st.error(result_message)
+        else:
+            st.info(result_message)
+        if saved_result.get("data") is not None:
+            st.json(saved_result["data"])
 
     latest_evse = tc.get_evse()
     st.subheader("Current EVSE security state")
