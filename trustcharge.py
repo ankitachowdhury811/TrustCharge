@@ -169,55 +169,6 @@ class TrustCharge:
         )
         return result
 
-    def recover_security(self):
-        state = self.get_evse()
-
-        # The enclosure must be closed.
-        if not state.get("enclosure_closed", True):
-            return {
-                "status": "REJECTED",
-                "details": "Enclosure is still open."
-            }
-
-        # Verify configuration integrity.
-        config_result = self.verify_configuration()
-
-        if config_result["status"] != "VERIFIED":
-            return {
-                "status": "REJECTED",
-                "details": "Configuration integrity verification failed."
-            }
-
-        # Verify installed firmware integrity.
-        firmware_result = self.verify_installed_firmware()
-
-        if firmware_result["status"] != "VERIFIED":
-            return {
-                "status": "REJECTED",
-                "details": "Firmware integrity verification failed."
-            }
-
-        # Clear the security alert only after all checks pass.
-        state = self.get_evse()
-        state["security_status"] = "SECURE"
-        state["message"] = "Security verification successful. EVSE is secure."
-        self._save_evse(state)
-
-        self._audit(
-            "security_recovery",
-            "SUCCESS",
-            {
-                "configuration": "VERIFIED",
-                "firmware": "VERIFIED",
-                "enclosure_closed": True
-            }
-        )
-
-        return {
-            "status": "RECOVERED",
-            "details": "All security checks passed."
-        }
-
     def simulate_enclosure_open(self):
         state = self.get_evse()
         state["enclosure_closed"] = False
@@ -241,10 +192,31 @@ class TrustCharge:
         return {"status": "ENCLOSURE CLOSED"}
 
     def firmware_status(self):
-        """Return the currently installed firmware information."""
-        return json.loads(
+        """Return installed firmware information and normalize legacy paths."""
+        state = json.loads(
             self.firmware_state_path.read_text(encoding="utf-8")
         )
+        filename = state.get("installed_file")
+
+        if filename:
+            portable_name = str(filename).replace("\\\\", "/").replace("\\", "/")
+            relative_path = Path(portable_name)
+
+            if relative_path.is_absolute() or ".." in relative_path.parts:
+                return state
+
+            resolved_path = (self.root / relative_path).resolve()
+            try:
+                resolved_path.relative_to(self.installed_firmware_dir.resolve())
+            except ValueError:
+                return state
+
+            normalized_name = resolved_path.relative_to(self.root.resolve()).as_posix()
+            if normalized_name != filename:
+                state["installed_file"] = normalized_name
+                self._write_json(self.firmware_state_path, state)
+
+        return state
 
     def install_signed_firmware(
         self, firmware_path, signature_path, new_version
@@ -375,7 +347,15 @@ class TrustCharge:
                 "details": "No installed firmware baseline is available."
             }
 
-        firmware_path = (self.root / filename).resolve()
+        portable_name = str(filename).replace("\\\\", "/").replace("\\", "/")
+        relative_path = Path(portable_name)
+        if relative_path.is_absolute() or ".." in relative_path.parts:
+            return {
+                "status": "ERROR",
+                "details": "Invalid installed firmware path."
+            }
+
+        firmware_path = (self.root / relative_path).resolve()
 
         try:
             firmware_path.relative_to(
