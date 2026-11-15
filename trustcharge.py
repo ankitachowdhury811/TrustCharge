@@ -72,7 +72,11 @@ class TrustCharge:
             )
 
     def _write_json(self, path, value):
-        path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        """Write valid UTF-8 JSON for this local single-process prototype."""
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = json.dumps(value, indent=2, sort_keys=True) + "\n"
+        path.write_text(payload, encoding="utf-8")
 
     def _seed_files(self):
         components = {
@@ -110,6 +114,47 @@ class TrustCharge:
             "charging_protocol": {"version": "1.2.1", "minimum_secure_version": "1.2.1", "notes": "Fixes a simulated protocol-state validation advisory", "content": "# TrustCharge managed demo component: charging protocol adapter\nPROTOCOL_VERSION = '1.2.1'\n# Update: stricter simulated protocol-state validation.\n"},
             "security_agent": {"version": "1.1.0", "minimum_secure_version": "1.1.0", "notes": "Improves simulated audit-event validation", "content": "# TrustCharge managed demo component: security agent\nAGENT_VERSION = '1.1.0'\n# Update: improved audit-event validation.\n"},
         }
+        # One-time migration from the older component layout. Older baselines
+        # refer to controller.py/protocol.py/security_agent.py, whereas this
+        # version manages isolated demo_* fixtures. In that specific legacy
+        # state, restore ONLY the demo fixtures from canonical in-code contents
+        # and create a matching baseline. Do not re-enrol arbitrary current
+        # files, and do not touch the real project modules.
+        legacy_filenames = {
+            "evse_controller": "controller.py",
+            "charging_protocol": "protocol.py",
+            "security_agent": "security_agent.py",
+        }
+        if self.baseline_path.exists():
+            try:
+                existing_baseline = json.loads(
+                    self.baseline_path.read_text(encoding="utf-8")
+                )
+                is_legacy_layout = all(
+                    existing_baseline.get(key, {}).get("file") == old_name
+                    for key, old_name in legacy_filenames.items()
+                )
+                if is_legacy_layout:
+                    migrated_baseline = {}
+                    for key, package in catalogue.items():
+                        fixture_path = self.component_map[key]
+                        trusted_content = package["content"].encode("utf-8")
+                        fixture_path.write_bytes(trusted_content)
+                        migrated_baseline[key] = {
+                            "file": fixture_path.name,
+                            "sha256": hashlib.sha256(trusted_content).hexdigest(),
+                            "enrolled_utc": now(),
+                        }
+                    self._write_json(self.baseline_path, migrated_baseline)
+                    self._audit(
+                        "legacy_demo_component_baseline_migration",
+                        "COMPLETED",
+                        {"components": list(migrated_baseline)},
+                    )
+            except (OSError, json.JSONDecodeError, TypeError, AttributeError):
+                # Leave an unreadable or unexpected baseline untouched.
+                pass
+
         for key, package in catalogue.items():
             package["content_sha256"] = hashlib.sha256(package["content"].encode("utf-8")).hexdigest()
             self._write_json(self.catalog_dir / f"{key}.json", package)
@@ -482,8 +527,52 @@ class TrustCharge:
             except json.JSONDecodeError: pass
         return events[::-1]
 
+    @staticmethod
+    def _default_evse_state():
+        return {
+            "charger_id": "TC-CHARGER-001",
+            "connector_id": "CCS-1",
+            "mode": "SIMULATED",
+            "vehicle_connected": False,
+            "charging": False,
+            "energy_kwh": 0.0,
+            "error": False,
+            "security_status": "SECURE",
+            "enclosure_closed": True,
+            "configuration": {
+                "max_voltage": 400,
+                "max_current": 32,
+                "charging_enabled": True
+            },
+            "message": "EVSE available; waiting for a vehicle."
+        }
+
     def get_evse(self):
-        return json.loads(self.state_path.read_text(encoding="utf-8"))
+        """Load EVSE state, recovering safely from a missing/empty/invalid JSON file."""
+        try:
+            raw = self.state_path.read_text(encoding="utf-8")
+            if not raw.strip():
+                raise json.JSONDecodeError("Empty EVSE state file", raw, 0)
+            state = json.loads(raw)
+            if not isinstance(state, dict):
+                raise ValueError("EVSE state must be a JSON object.")
+            return state
+        except FileNotFoundError:
+            state = self._default_evse_state()
+            self._save_evse(state)
+            return state
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+            # Preserve the damaged file for diagnosis before restoring a safe state.
+            if self.state_path.exists():
+                backup = self.state_path.with_name("evse_state.corrupt.json")
+                if not backup.exists():
+                    shutil.copy2(self.state_path, backup)
+            state = self._default_evse_state()
+            self._save_evse(state)
+            self._audit("evse_state_recovery", "RECOVERED_DEFAULT_STATE", {
+                "reason": "Missing, empty, or invalid EVSE state JSON"
+            })
+            return state
 
     def _save_evse(self, state):
         self._write_json(self.state_path, state)
