@@ -414,7 +414,6 @@ with tab6:
             "Security alert: charging is restricted until the enclosure is closed "
             "and all required integrity checks pass."
         )
-    st.rerun()
     st.divider()
     st.subheader("Configuration integrity")
 
@@ -436,6 +435,7 @@ with tab6:
             "message": "Configuration baseline created.",
             "data": {"sha256": baseline_hash}
         }
+        st.rerun()
 
     if verify_col.button(
         "Verify configuration",
@@ -451,7 +451,7 @@ with tab6:
         st.session_state["evse_action_result"] = {
             "level": level, "message": message, "data": config_result
         }
-    st.rerun()
+        st.rerun()
     st.json(current_evse.get("configuration", {}))
 
     st.divider()
@@ -474,7 +474,7 @@ with tab6:
             "message": "Enclosure tampering detected. Charging has been stopped.",
             "data": result
         }
-    st.rerun()
+        st.rerun()
     if close_col.button(
         "Simulate enclosure closing",
         key="simulate_enclosure_close"
@@ -485,7 +485,7 @@ with tab6:
             "message": "Enclosure closed. Existing security alerts remain active until verification and recovery.",
             "data": result
         }
-    st.rerun()
+        st.rerun()
     st.divider()
     st.subheader("Controlled security recovery")
 
@@ -510,7 +510,7 @@ with tab6:
         st.session_state["evse_action_result"] = {
             "level": level, "message": message, "data": recovery_result
         }
-    st.rerun()
+        st.rerun()
     # Render feedback after processing the current button press.
     # No explicit st.rerun() is used here, so the result remains on the page.
     saved_result = st.session_state.get("evse_action_result")
@@ -528,7 +528,6 @@ with tab6:
         if saved_result.get("data") is not None:
             st.json(saved_result["data"])
 
-    st.rerun()
     latest_evse = tc.get_evse()
     st.subheader("Current EVSE security state")
     st.json({
