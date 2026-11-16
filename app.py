@@ -1,7 +1,37 @@
 from pathlib import Path
 import streamlit as st
 import pandas as pd
+import json
+import hashlib
+from urllib.request import Request, urlopen
 from trustcharge import TrustCharge
+
+
+def github_get_bytes(url):
+    """Fetch a GitHub API or raw-content URL, using an optional Streamlit secret."""
+    try:
+        token = st.secrets.get("GITHUB_TOKEN", "")
+    except Exception:
+        token = ""
+
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "TrustCharge-Firmware-Updater"
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    request = Request(url, headers=headers)
+    with urlopen(request, timeout=20) as response:
+        return response.read()
+
+
+def version_tuple(version):
+    try:
+        return tuple(int(part) for part in str(version).split("."))
+    except (ValueError, TypeError):
+        return (0, 0, 0)
 
 ROOT = Path(__file__).parent
 tc = TrustCharge(ROOT)
@@ -114,28 +144,191 @@ with tab1:
 
 with tab2:
     st.subheader("Check update availability")
-    st.write("The local update catalogue contains versioned demo packages. Update installation replaces only TrustCharge's managed sandbox component files.")
-    if st.button("Check for updates", type="primary"):
+    st.write(
+        "Check the local component catalogue and the published firmware "
+        "releases on GitHub from one place. Installing either update remains "
+        "a separate, user-controlled action."
+    )
+
+    if st.button("Check for Updates", type="primary", key="check_all_updates"):
+        # Check the existing managed-component update catalogue.
         st.session_state["updates_checked"] = True
         st.session_state["available_updates"] = tc.available_updates()
-    updates = tc.available_updates()
-    if updates:
-        st.dataframe(pd.DataFrame(updates), use_container_width=True, hide_index=True)
-        if st.button("Install all verified updates", type="primary"):
-            result = tc.install_all_updates()
-            st.session_state["update_result"] = result
+
+        # Check the dedicated GitHub firmware release branch.
+        try:
+            _github_owner = "ankitachowdhury811"
+            _github_repo = "TrustCharge"
+            _github_branch = "firmware-releases"
+            _github_api = (
+                    f"https://api.github.com/repos/{_github_owner}/{_github_repo}/contents/"
+                    f"firmware/releases?ref={_github_branch}"
+                )
+
+            _listing = json.loads(github_get_bytes(_github_api).decode("utf-8"))
+            if not isinstance(_listing, list):
+                raise ValueError("GitHub did not return a firmware release directory listing.")
+
+            _release_files = {
+                item.get("name"): item
+                for item in _listing
+                if item.get("type") == "file"
+            }
+            _firmware_releases = []
+
+            for _filename, _binary_item in _release_files.items():
+                if not (_filename.startswith("firmware_v") and _filename.endswith(".bin")):
+                    continue
+
+                _metadata_item = _release_files.get(_filename + ".json")
+                _signature_item = _release_files.get(_filename + ".sig")
+                if not _metadata_item or not _signature_item:
+                    continue
+
+                _metadata = json.loads(
+                    github_get_bytes(_metadata_item["download_url"]).decode("utf-8")
+                )
+                _firmware_releases.append({
+                    "version": str(_metadata["version"]),
+                    "filename": _filename,
+                    "sha256": str(_metadata["sha256"]),
+                    "binary_url": _binary_item["download_url"],
+                    "signature_url": _signature_item["download_url"]
+                })
+
+            _firmware_releases.sort(
+                key=lambda _item: version_tuple(_item["version"]),
+                reverse=True
+            )
+            st.session_state["tc_published_firmware"] = _firmware_releases
+            st.session_state["tc_published_firmware_checked"] = True
+            st.session_state.pop("tc_firmware_check_error", None)
+        except Exception as _error:
+            st.session_state["tc_published_firmware"] = []
+            st.session_state["tc_published_firmware_checked"] = True
+            st.session_state["tc_firmware_check_error"] = str(_error)
+
+    # Existing local component updates.
+    st.divider()
+    st.subheader("Managed component updates")
+    _component_updates = st.session_state.get("available_updates", [])
+    if _component_updates:
+        st.dataframe(pd.DataFrame(_component_updates), use_container_width=True, hide_index=True)
+
+        if st.button("Install all verified component updates", type="primary", key="install_all_component_updates"):
+            st.session_state["update_result"] = tc.install_all_updates()
             st.rerun()
-        if st.button("Install selected update"):
-            st.info("Use the per-component selector below to install one update.")
-        selected = st.selectbox("Component to update", options=[u["component"] for u in updates])
-        if st.button(f"Install update for {selected}"):
-            st.session_state["update_result"] = tc.install_update(selected)
+
+        _selected_component = st.selectbox(
+            "Component to update",
+            options=[_item["component"] for _item in _component_updates],
+            key="selected_component_update"
+        )
+        if st.button("Install selected component update", key="install_selected_component_update"):
+            st.session_state["update_result"] = tc.install_update(_selected_component)
             st.rerun()
-    else:
+    elif st.session_state.get("updates_checked"):
         st.success("All managed components are at the catalogue's latest version.")
+    else:
+        st.info("Click Check for Updates to check the component catalogue.")
+
     if "update_result" in st.session_state:
-        st.subheader("Update operation result")
+        st.subheader("Component update operation result")
         st.dataframe(pd.DataFrame(st.session_state["update_result"]), use_container_width=True, hide_index=True)
+
+    # Published firmware updates from the separate GitHub branch.
+    st.divider()
+    st.subheader("Published firmware updates")
+    st.caption(
+        "Firmware packages are downloaded from the firmware-releases branch. "
+        "SHA-256 and the digital signature are checked before installation."
+    )
+
+    if st.session_state.get("tc_firmware_check_error"):
+        st.error(
+            "Could not retrieve GitHub firmware releases: "
+            + st.session_state["tc_firmware_check_error"]
+        )
+
+    _published_firmware = st.session_state.get("tc_published_firmware", [])
+    if _published_firmware:
+        _installed_version = str(
+            tc.firmware_status().get("installed_version", "0.0.0")
+        )
+        _newer_firmware = [
+            _item for _item in _published_firmware
+            if version_tuple(_item["version"]) > version_tuple(_installed_version)
+        ]
+
+        if not _newer_firmware:
+            st.success(f"Installed firmware v{_installed_version} is up to date.")
+        else:
+            st.dataframe(
+                pd.DataFrame([
+                    {
+                        "version": _item["version"],
+                        "firmware_file": _item["filename"],
+                        "sha256": _item["sha256"]
+                    }
+                    for _item in _newer_firmware
+                ]),
+                use_container_width=True,
+                hide_index=True
+            )
+            _firmware_labels = [
+                f"v{_item['version']} — {_item['filename']}"
+                for _item in _newer_firmware
+            ]
+            _selected_firmware_label = st.selectbox(
+                "Firmware release to install",
+                _firmware_labels,
+                key="tc_selected_published_firmware"
+            )
+            _selected_firmware = _newer_firmware[
+                _firmware_labels.index(_selected_firmware_label)
+            ]
+
+            if st.button(
+                "Download, verify and install firmware",
+                key="tc_install_published_firmware"
+            ):
+                try:
+                    _binary_data = github_get_bytes(_selected_firmware["binary_url"])
+                    _signature_data = github_get_bytes(_selected_firmware["signature_url"])
+                    _actual_sha256 = hashlib.sha256(_binary_data).hexdigest()
+
+                    if _actual_sha256 != _selected_firmware["sha256"]:
+                        st.error("SHA-256 mismatch. Firmware installation blocked.")
+                    else:
+                        _download_dir = ROOT / "firmware" / "downloaded_releases"
+                        _download_dir.mkdir(parents=True, exist_ok=True)
+                        _package_path = _download_dir / _selected_firmware["filename"]
+                        _signature_path = Path(str(_package_path) + ".sig")
+                        _package_path.write_bytes(_binary_data)
+                        _signature_path.write_bytes(_signature_data)
+
+                        _install_result = tc.install_signed_firmware(
+                            _package_path,
+                            _signature_path,
+                            _selected_firmware["version"]
+                        )
+                        if _install_result.get("status") == "INSTALLED":
+                            st.success(_install_result.get("details", "Firmware installed."))
+                            st.session_state["firmware_action_result"] = _install_result
+                        else:
+                            st.error(
+                                _install_result.get(
+                                    "details",
+                                    "Firmware installation rejected."
+                                )
+                            )
+                        st.json(_install_result)
+                except Exception as _error:
+                    st.error(f"Firmware download/installation failed: {_error}")
+    elif st.session_state.get("tc_published_firmware_checked"):
+        st.info("No complete signed firmware releases were found in the GitHub release branch.")
+    else:
+        st.info("Click Check for Updates to check the published firmware branch.")
 
 with tab3:
     st.subheader("Check for errors, malicious interference, and vulnerable patches")
@@ -215,59 +408,52 @@ with tab5:
 
     st.divider()
 
-    # Signed firmware installation
+    # Firmware installation is centralized in the GitHub update workflow.
+    # This tab reflects the same published release selected in Updates & packages.
     st.subheader("Secure firmware installation")
 
-    firmware_version = st.text_input(
-        "Incoming firmware version",
-        value="1.2.0",
-        key="incoming_firmware_version"
+    _tab5_installed_version = str(
+        firmware_state.get("installed_version", "0.0.0")
     )
+    _tab5_releases = st.session_state.get("tc_published_firmware", [])
+    _tab5_checked = st.session_state.get("tc_published_firmware_checked", False)
+    _tab5_newer_releases = [
+        item for item in _tab5_releases
+        if version_tuple(item.get("version")) > version_tuple(_tab5_installed_version)
+    ]
 
-    firmware_file = (
-        ROOT / "firmware" / "firmware_v1.2.bin"
-    )
-
-    signature_file = Path(
-        str(firmware_file) + ".sig"
-    )
-
-    st.caption(
-        "The dashboard uses a locally prepared firmware package "
-        "and its detached digital signature."
-    )
-
-    st.write(
-        "Firmware package:",
-        firmware_file.name
-    )
-
-    if st.button(
-        "Install and verify signed firmware",
-        type="primary",
-        key="install_signed_firmware"
-    ):
-
-        if not firmware_file.is_file():
-            st.error("Firmware package not found.")
-
-        elif not signature_file.is_file():
-            st.error("Firmware signature file not found.")
-
-        else:
-            result = tc.install_signed_firmware(
-                firmware_file,
-                signature_file,
-                firmware_version
-            )
-
-            if result["status"] == "INSTALLED":
-                st.success(result["details"])
-            else:
-                st.error(result["details"])
-
-            st.session_state["firmware_action_result"] = result
-            st.rerun()
+    if not _tab5_checked:
+        st.info(
+            "Check for published firmware in the Updates & packages tab. "
+            "The selected GitHub release will be reflected here."
+        )
+    elif not _tab5_newer_releases:
+        st.success(
+            f"Firmware v{_tab5_installed_version} is up to date. "
+            "No newer published release is currently available."
+        )
+    else:
+        _tab5_labels = [
+            f"v{item['version']} — {item['filename']}"
+            for item in _tab5_newer_releases
+        ]
+        _tab5_selected_label = st.session_state.get(
+            "tc_selected_published_firmware", _tab5_labels[0]
+        )
+        _tab5_selected_release = next(
+            (
+                item for item, label in zip(_tab5_newer_releases, _tab5_labels)
+                if label == _tab5_selected_label
+            ),
+            _tab5_newer_releases[0]
+        )
+        st.write("Selected GitHub firmware release:")
+        st.write(f"**Version:** { _tab5_selected_release['version'] }")
+        st.write(f"**Package:** { _tab5_selected_release['filename'] }")
+        st.write(f"**SHA-256:** `{_tab5_selected_release['sha256']}`")
+        st.caption(
+            "Select and install this release from the Updates & packages tab."   
+        )
 
     if "firmware_action_result" in st.session_state:
         st.subheader("Latest firmware installation result")
@@ -293,7 +479,7 @@ with tab5:
     # Attack 1: Firmware rollback
     st.markdown("#### 1. Firmware rollback attempt")
 
-    if st.button("Simulate rollback to version 1.1.0"):
+    if st.button("Simulate rollback to previous firmware version"):
         rollback_result = tc.install_signed_firmware(
             ROOT / "firmware" / "firmware_v1.1.bin",
             ROOT / "firmware" / "firmware_v1.1.bin.sig",
@@ -384,7 +570,9 @@ with tab5:
                     restored = tc.verify_installed_firmware()
                     st.write("Post-test restoration verification:")
                     st.json(restored)
+######################
 
+######################
 st.divider()
 st.caption("Scope: local EVSE software prototype. It does not communicate with a real charger, vehicle, BMS, CCS controller, or OCPP backend. Do not use it to update production systems.")
 
