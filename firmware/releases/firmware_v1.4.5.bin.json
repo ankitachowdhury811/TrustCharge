@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "version": "1.4.5",
+  "filename": "firmware_v1.4.5.bin",
+  "signature": "firmware_v1.4.5.bin.sig",
+  "signature_algorithm": "Ed25519",
+  "sha256": "1ec1e95893e10edbf7870728e06601aba12e6246e1051d354e81cda2a4878303",
+  "sequence": 5,
+  "generated_utc": "2026-11-16T14:46:59.266375+00:00",
+  "simulated": true
+}
