@@ -201,3 +201,5 @@ class SecurityAgent:
         return False, "SECURITY ALERT: Charger enclosure is open."
 
 # DEMO_SUSPICIOUS_MARKER: simulated suspicious change
+
+# DEMO_SUSPICIOUS_MARKER: simulated suspicious change
