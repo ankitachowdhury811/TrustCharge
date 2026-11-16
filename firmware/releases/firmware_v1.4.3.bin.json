@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "version": "1.4.3",
+  "filename": "firmware_v1.4.3.bin",
+  "signature": "firmware_v1.4.3.bin.sig",
+  "signature_algorithm": "Ed25519",
+  "sha256": "e7498810cd9a9a0414224a19d60a74f0bdffdf98008cf48de2a2ca5c8e60d2e3",
+  "sequence": 3,
+  "generated_utc": "2026-11-16T14:36:50.504601+00:00",
+  "simulated": true
+}
