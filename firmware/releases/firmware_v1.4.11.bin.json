@@ -4,8 +4,8 @@
   "filename": "firmware_v1.4.11.bin",
   "signature": "firmware_v1.4.11.bin.sig",
   "signature_algorithm": "Ed25519",
-  "sha256": "7b5e843d04147550496bf64fc6606b14df5dab3f06651d37b4e536aadbcda4e6",
+  "sha256": "b85aed1b181b8cfac27f3a0660f61b6561710a80ef33ea37b5c9f46d109307d0",
   "sequence": 11,
-  "generated_utc": "2026-11-17T05:11:15.517878+00:00",
+  "generated_utc": "2026-11-17T05:12:39.041809+00:00",
   "simulated": true
 }
